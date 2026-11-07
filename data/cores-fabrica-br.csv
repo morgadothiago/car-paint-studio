@@ -1,0 +1,37 @@
+make,model,yearFrom,yearTo,code,name,base,highlight,shadow,source
+chevrolet,onix,2017,2025,,Branco Summit,#f2f2f0,,,estimado
+chevrolet,onix,2017,2025,,Prata Switchblade,#b4b7bb,,,estimado
+chevrolet,onix,2017,2025,,Preto Ouro Negro,#111214,,,estimado
+chevrolet,onix,2017,2025,,Cinza Graphite,#4a4d52,,,estimado
+chevrolet,onix,2017,2023,,Vermelho Carmim,#8e1020,,,estimado
+chevrolet,onix,2023,2025,,Azul Seeker,#1f3f73,,,estimado
+chevrolet,onix,2023,2023,,Cinza Satin Steel,#7b7f85,,,estimado
+chevrolet,onix,2025,2025,,Vermelho Chili,#b5121f,,,estimado
+chevrolet,onix,2025,2025,,Azul Blue Eyes,#3f7fb8,,,estimado
+volkswagen,t-cross,2018,2018,,Branco Puro,#f4f4f2,,,estimado
+volkswagen,t-cross,2018,2018,,Preto Ninja,#0f1012,,,estimado
+volkswagen,t-cross,2018,2018,,Prata Sargas,#aeb1b6,,,estimado
+volkswagen,t-cross,2018,2018,,Cinza Platinum,#6f7378,,,estimado
+volkswagen,t-cross,2018,2018,,Vermelho Crimson,#9e1224,,,estimado
+volkswagen,t-cross,2018,2018,,Azul Norway,#28508a,,,estimado
+volkswagen,t-cross,2018,2018,,Laranja Energetic,#e8661a,,,estimado
+volkswagen,t-cross,2018,2018,,Bronze Namíbia,#7a5a3f,,,estimado
+volkswagen,t-cross,2018,2018,,Prata Pyrit,#a3a6ab,,,estimado
+fiat,strada,2024,2024,,Preto Vulcano,#0e0e10,,,estimado
+fiat,strada,2024,2024,,Branco Banchisa,#f1f1ef,,,estimado
+fiat,strada,2024,2024,,Vermelho Montecarlo,#b01322,,,estimado
+fiat,strada,2024,2024,,Prata Bari,#b9bcc0,,,estimado
+fiat,strada,2024,2024,,Cinza Silverstone,#5e6166,,,estimado
+fiat,argo,2024,2024,,Preto Vulcano,#0e0e10,,,estimado
+fiat,argo,2024,2024,,Branco Banchisa,#f1f1ef,,,estimado
+fiat,argo,2024,2024,,Vermelho Montecarlo,#b01322,,,estimado
+fiat,argo,2024,2024,,Prata Bari,#b9bcc0,,,estimado
+fiat,argo,2024,2024,,Cinza Silverstone,#5e6166,,,estimado
+fiat,mobi,2024,2024,,Preto Vulcano,#0e0e10,,,estimado
+fiat,mobi,2024,2024,,Branco Banchisa,#f1f1ef,,,estimado
+fiat,mobi,2024,2024,,Vermelho Montecarlo,#b01322,,,estimado
+fiat,mobi,2024,2024,,Prata Bari,#b9bcc0,,,estimado
+fiat,mobi,2024,2024,,Cinza Silverstone,#5e6166,,,estimado
+fiat,argo,2024,2024,,Verde Oliva,#5b6b3c,,,estimado
+fiat,argo,2024,2024,,Vermelho Tribal,#b3281f,,,estimado
+fiat,argo,2020,2020,,Vermelho Alpine,#c40d1e,,,estimado

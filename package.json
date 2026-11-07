@@ -1,0 +1,38 @@
+{
+  "name": "car-paint-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Simulador de pintura de carro com modelo 3D gerado a partir de fotos e vídeos",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "tsc -p electron && concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "build": "tsc -p electron && vite build",
+    "start": "electron .",
+    "build:native": "swiftc -O native/photogrammetry/main.swift -o native/photogrammetry/photogrammetry",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.170.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "me.coest.carpaintstudio",
+    "files": ["dist/**", "dist-electron/**"],
+    "extraResources": [{ "from": "native/photogrammetry/photogrammetry", "to": "photogrammetry" }],
+    "directories": { "output": "release" }
+  }
+}
