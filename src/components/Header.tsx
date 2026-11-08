@@ -8,9 +8,10 @@ import {
   IconReset,
   IconDownload,
   IconSettings,
+  IconZap,
 } from "./Icons";
 
-export type StudioTab = "paint" | "model" | "interior" | "vehicle";
+export type StudioTab = "paint" | "model" | "interior" | "vehicle" | "electric";
 
 interface HeaderProps {
   activeTab: StudioTab;
@@ -85,6 +86,14 @@ export default function Header({
         >
           <IconFileText size={16} />
           <span>Dados & FIPE</span>
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === "electric" ? "active" : ""}`}
+          onClick={() => onTabChange("electric")}
+        >
+          <IconZap size={16} />
+          <span>Elétrica</span>
         </button>
       </nav>
 

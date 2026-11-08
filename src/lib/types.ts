@@ -1,6 +1,9 @@
 export interface Api {
   getSettings(): Promise<{ hasMeshyKey: boolean; hasPlateToken: boolean; hasImaginKey: boolean; hasGeminiKey: boolean }>;
   setGeminiKey(key: string): Promise<void>;
+  electricList(): Promise<import("./electric").Vehicle[]>;
+  electricSave(v: import("./electric").Vehicle): Promise<void>;
+  electricDelete(id: string): Promise<void>;
   photorealGenerate(shot: string, desc: string): Promise<string>;
   setImaginKey(key: string): Promise<void>;
   colorsSync(q: { make: string; modelFamily?: string; modelYear?: number }): Promise<{ added: number; updated: number; total: number }>;

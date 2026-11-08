@@ -120,6 +120,32 @@ ipcMain.handle("fipe:get", async (_e, route: string) => {
 });
 
 
+// ---------- Esquema elétrico / caixas de fusíveis (JSON por veículo) ----------
+const elecDir = () => path.join(app.getPath("userData"), "electric");
+const elecFile = (id: string) => path.join(elecDir(), `${id.replace(/[^a-z0-9_-]/gi, "")}.json`);
+
+ipcMain.handle("electric:list", () => {
+  try {
+    return fs
+      .readdirSync(elecDir())
+      .filter((n) => n.endsWith(".json"))
+      .map((n) => JSON.parse(fs.readFileSync(path.join(elecDir(), n), "utf8")))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle("electric:save", (_e, v: { id: string }) => {
+  if (!v?.id || !/^[a-z0-9_-]+$/i.test(v.id)) throw new Error("Veículo inválido");
+  fs.mkdirSync(elecDir(), { recursive: true });
+  fs.writeFileSync(elecFile(v.id), JSON.stringify(v));
+});
+
+ipcMain.handle("electric:delete", (_e, id: string) => {
+  fs.rmSync(elecFile(id), { force: true });
+});
+
 // ---------- Biblioteca local de modelos (evita gastar créditos da Meshy) ----------
 interface Paint { hex: string; finish: string; tol: number }
 interface Interior { flip: boolean; items: Record<string, { show: boolean; color: string }> }

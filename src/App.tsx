@@ -13,6 +13,7 @@ import InteriorTab from "./components/InteriorTab";
 import VehicleTab from "./components/VehicleTab";
 import SettingsModal from "./components/SettingsModal";
 import PhotorealModal from "./components/PhotorealModal";
+import ElectricPanel from "./components/ElectricPanel";
 
 const FINISH_LABELS: Record<Finish, string> = {
   gloss: "Brilhante",
@@ -362,7 +363,9 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      <div className="studio-workspace">
+      {activeTab === "electric" && <ElectricPanel />}
+
+      <div className="studio-workspace" style={activeTab === "electric" ? { display: "none" } : undefined}>
         {/* Left Sidebar Inspector */}
         <aside className="studio-sidebar">
           {activeTab === "paint" && (
