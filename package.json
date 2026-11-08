@@ -1,6 +1,6 @@
 {
   "name": "car-paint-studio",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Simulador de pintura de carro com modelo 3D gerado a partir de fotos e vídeos",
   "main": "dist-electron/main.js",
