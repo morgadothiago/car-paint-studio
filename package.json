@@ -37,7 +37,8 @@
       "dist-electron/**"
     ],
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "mac": {
       "target": [
@@ -50,13 +51,15 @@
           "from": "native/photogrammetry/photogrammetry",
           "to": "photogrammetry"
         }
-      ]
+      ],
+      "icon": "build/icon.icns"
     },
     "win": {
       "target": [
         "nsis",
         "zip"
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "linux": {
       "target": [
@@ -64,7 +67,8 @@
         "deb"
       ],
       "category": "Graphics",
-      "maintainer": "Thiago Morgado <thiago@coest.me>"
+      "maintainer": "Thiago Morgado <thiago@coest.me>",
+      "icon": "build/icon.png"
     },
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   },
