@@ -31,8 +31,47 @@
   },
   "build": {
     "appId": "me.coest.carpaintstudio",
-    "files": ["dist/**", "dist-electron/**"],
-    "extraResources": [{ "from": "native/photogrammetry/photogrammetry", "to": "photogrammetry" }],
-    "directories": { "output": "release" }
-  }
+    "productName": "Car Paint Studio",
+    "files": [
+      "dist/**",
+      "dist-electron/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.graphics-design",
+      "extraResources": [
+        {
+          "from": "native/photogrammetry/photogrammetry",
+          "to": "photogrammetry"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Graphics",
+      "maintainer": "Thiago Morgado <thiago@coest.me>"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+  },
+  "author": {
+    "name": "Thiago Morgado",
+    "email": "thiago@coest.me"
+  },
+  "homepage": "https://github.com/morgadothiago/car-paint-studio",
+  "license": "MIT"
 }
