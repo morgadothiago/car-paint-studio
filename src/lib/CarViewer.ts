@@ -8,19 +8,65 @@ import type { Tones } from "./colors";
 
 type PBR = THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial;
 
+const FINISH_BASE: Partial<THREE.MeshPhysicalMaterialParameters> = {
+  metalness: 0,
+  roughness: 0.5,
+  clearcoat: 0,
+  clearcoatRoughness: 0,
+  iridescence: 0,
+  sheen: 0,
+  specularIntensity: 1,
+  envMapIntensity: 1,
+};
 const FINISHES: Record<Finish, Partial<THREE.MeshPhysicalMaterialParameters>> = {
-  gloss: { metalness: 0.2, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.03 },
-  matte: { metalness: 0.1, roughness: 0.85, clearcoat: 0, clearcoatRoughness: 0.5 },
-  metallic: { metalness: 0.9, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 },
+  // tinta lisa com verniz espelhado
+  gloss: { ...FINISH_BASE, metalness: 0.05, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 0.95 },
+  // sem verniz, reflexo difuso e suave
+  matte: { ...FINISH_BASE, metalness: 0, roughness: 0.92, specularIntensity: 0.35, envMapIntensity: 0.55 },
+  // partículas de alumínio sob o verniz (grão via normal do verniz)
+  metallic: { ...FINISH_BASE, metalness: 0.88, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.05 },
+  // reflexo que muda de tom com o ângulo (película fina) + brilho de borda
   pearl: {
-    metalness: 0.5,
-    roughness: 0.25,
+    ...FINISH_BASE,
+    metalness: 0.35,
+    roughness: 0.24,
     clearcoat: 1,
     clearcoatRoughness: 0.02,
-    iridescence: 0.8,
+    iridescence: 0.75,
     iridescenceIOR: 1.6,
+    iridescenceThicknessRange: [180, 520],
+    sheen: 0.22,
+    sheenRoughness: 0.5,
+    sheenColor: new THREE.Color(0xffffff),
+    envMapIntensity: 1,
   },
 };
+
+let flakeTex: THREE.Texture | null = null;
+/** Normal map de grão fino (flocos de alumínio) usado no verniz do acabamento metálico. */
+function flakeNormal(): THREE.Texture {
+  if (flakeTex) return flakeTex;
+  const N = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = N;
+  const ctx = c.getContext("2d")!;
+  const img = ctx.createImageData(N, N);
+  for (let i = 0; i < N * N; i++) {
+    const nx = (Math.random() - 0.5) * 0.9,
+      ny = (Math.random() - 0.5) * 0.9;
+    const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
+    img.data[i * 4] = (nx * 0.5 + 0.5) * 255;
+    img.data[i * 4 + 1] = (ny * 0.5 + 0.5) * 255;
+    img.data[i * 4 + 2] = (nz * 0.5 + 0.5) * 255;
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(40, 40);
+  flakeTex = t;
+  return t;
+}
 
 interface TexState {
   orig: ImageData;
@@ -101,7 +147,17 @@ export class CarViewer {
   private controls: OrbitControls;
   private model: THREE.Object3D | null = null;
   private materials = new Map<string, PBR>();
-  private originals = new Map<string, { color: THREE.Color; map: THREE.Texture | null }>();
+  private originals = new Map<
+    string,
+    {
+      color: THREE.Color;
+      map: THREE.Texture | null;
+      metalness?: number;
+      roughness?: number;
+      metalnessMap?: THREE.Texture | null;
+      roughnessMap?: THREE.Texture | null;
+    }
+  >();
   private raf = 0;
   private ro: ResizeObserver;
   private tex = new Map<string, TexState>();
@@ -127,7 +183,7 @@ export class CarViewer {
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMapping = THREE.NeutralToneMapping; // preserva a cor escolhida (ACES dessatura)
     this.renderer.localClippingEnabled = true; // recorta peças do interior no limite da cabine
     container.appendChild(this.renderer.domElement);
 
@@ -184,11 +240,29 @@ export class CarViewer {
     const c = b2.getCenter(new THREE.Vector3());
     obj.position.sub(new THREE.Vector3(c.x, b2.min.y, c.z));
     obj.traverse((o) => {
-      const m = (o as THREE.Mesh).material as PBR | PBR[] | undefined;
+      const mesh = o as THREE.Mesh;
+      const m = mesh.material as PBR | PBR[] | undefined;
       if (!m) return;
-      for (const mat of Array.isArray(m) ? m : [m]) {
+      // MeshPhysicalMaterial é necessário para verniz (clearcoat), iridescência e brilho de borda
+      const up = (x: PBR): PBR => {
+        if ((x as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial) return x;
+        const p = new THREE.MeshPhysicalMaterial();
+        THREE.MeshStandardMaterial.prototype.copy.call(p, x as THREE.MeshStandardMaterial); // só campos padrão
+        p.name = x.name;
+        return p;
+      };
+      const list = (Array.isArray(m) ? m : [m]).map(up);
+      mesh.material = Array.isArray(m) ? list : list[0];
+      for (const mat of list) {
         this.materials.set(mat.uuid, mat);
-        this.originals.set(mat.uuid, { color: mat.color.clone(), map: mat.map });
+        this.originals.set(mat.uuid, {
+          color: mat.color.clone(),
+          map: mat.map,
+          metalness: mat.metalness,
+          roughness: mat.roughness,
+          metalnessMap: mat.metalnessMap,
+          roughnessMap: mat.roughnessMap,
+        });
       }
     });
     this.scene.add(obj);
@@ -286,6 +360,7 @@ export class CarViewer {
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const tex = orig.clone();
     tex.image = canvas;
+    tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     const st: TexState = {
       orig: data,
       canvas,
@@ -432,6 +507,18 @@ export class CarViewer {
     return false;
   }
 
+  /** Aplica o acabamento. Mapas de metal/rugosidade do scan são ignorados para o acabamento valer em todo o carro. */
+  private applyFinish(m: PBR, finish: Finish) {
+    const p = m as THREE.MeshPhysicalMaterial;
+    p.metalnessMap = null;
+    p.roughnessMap = null;
+    Object.assign(p, FINISHES[finish]);
+    if (finish === "metallic") {
+      p.clearcoatNormalMap = flakeNormal();
+      p.clearcoatNormalScale = new THREE.Vector2(0.35, 0.35);
+    } else p.clearcoatNormalMap = null;
+  }
+
   private apply() {
     if (!this.last) return;
     const { uuids, tones, finish, tol } = this.last;
@@ -452,7 +539,7 @@ export class CarViewer {
         m.map = st.tex;
         m.color.set(0xffffff);
       } else m.color.set(tones.base);
-      Object.assign(m, FINISHES[finish]);
+      this.applyFinish(m, finish);
       m.needsUpdate = true;
     }
   }
@@ -747,6 +834,13 @@ export class CarViewer {
       const m = this.materials.get(id)!;
       m.color.copy(o.color);
       m.map = o.map;
+      const p = m as THREE.MeshPhysicalMaterial;
+      Object.assign(p, FINISH_BASE);
+      p.clearcoatNormalMap = null;
+      if (o.metalness !== undefined) p.metalness = o.metalness;
+      if (o.roughness !== undefined) p.roughness = o.roughness;
+      p.metalnessMap = o.metalnessMap ?? null;
+      p.roughnessMap = o.roughnessMap ?? null;
       m.needsUpdate = true;
     }
   }
