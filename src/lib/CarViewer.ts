@@ -694,6 +694,87 @@ export class CarViewer {
     const lg = ext[0] >= ext[2] ? 0 : 2; // eixo do comprimento
     const lt = lg === 0 ? 2 : 0; // eixo lateral
     const hh = ext[1];
+    // Faróis, lanternas, grade e logos: nas pontas do carro, o que não é tinta lisa da cor da lataria fica protegido.
+    {
+      const sxy = [W / P, H / P];
+      const lumAt = (x: number, y: number) => {
+        const xx = Math.min(W - 1, Math.max(0, Math.round(x))),
+          yy = Math.min(H - 1, Math.max(0, Math.round(y)));
+        const i = (yy * W + xx) * 4;
+        return lum(d[i], d[i + 1], d[i + 2]);
+      };
+      const [br, bg, bb] = st.body;
+      const endZone = ext[lg] * 0.17;
+      const y0 = mn[1] + hh * 0.2,
+        y1 = mn[1] + hh * 0.7;
+      const prot: number[] = [];
+      for (const k of ks) {
+        const l = pos[k * 3 + lg],
+          y = pos[k * 3 + 1];
+        if (y < y0 || y > y1 || (l - mn[lg] > endZone && mx[lg] - l > endZone)) continue;
+        const cx = ((k % P) + 0.5) * sxy[0],
+          cy = (Math.floor(k / P) + 0.5) * sxy[1];
+        const i = (Math.min(H - 1, Math.floor(cy)) * W + Math.min(W - 1, Math.floor(cx))) * 4;
+        const dist = Math.hypot(d[i] - br, d[i + 1] - bg, d[i + 2] - bb);
+        let sum = 0,
+          sum2 = 0,
+          n = 0;
+        for (let oy = -1; oy <= 1; oy++)
+          for (let ox = -1; ox <= 1; ox++) {
+            const v = lumAt(cx + ox * 5, cy + oy * 5);
+            sum += v;
+            sum2 += v * v;
+            n++;
+          }
+        const sd = Math.sqrt(Math.max(0, sum2 / n - (sum / n) ** 2));
+        if (dist > 75 || (sd > 22 && dist > 45)) prot.push(k);
+      }
+      // Mantém só peças de verdade (grupos grandes de pontos vizinhos); manchas pequenas de sujeira na tinta são ignoradas.
+      const cell = new Uint8Array(P * P);
+      for (const k of prot) cell[k] = 1;
+      const grow = new Uint8Array(P * P);
+      for (const k of prot) {
+        const ky = Math.floor(k / P),
+          kx = k % P;
+        for (let ny = Math.max(0, ky - 2); ny <= Math.min(P - 1, ky + 2); ny++)
+          for (let nx = Math.max(0, kx - 2); nx <= Math.min(P - 1, kx + 2); nx++) grow[ny * P + nx] = 1;
+      }
+      const seen = new Uint8Array(P * P);
+      const keep: number[] = [];
+      for (const k0 of prot) {
+        if (seen[k0]) continue;
+        const comp: number[] = [];
+        const stack = [k0];
+        seen[k0] = 1;
+        let real = 0;
+        while (stack.length) {
+          const k = stack.pop()!;
+          comp.push(k);
+          if (cell[k]) real++;
+          const ky = Math.floor(k / P),
+            kx = k % P;
+          for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = kx + ox,
+              ny = ky + oy;
+            if (nx < 0 || ny < 0 || nx >= P || ny >= P) continue;
+            const nk = ny * P + nx;
+            if (grow[nk] && !seen[nk]) ((seen[nk] = 1), stack.push(nk));
+          }
+        }
+        if (real >= 110) for (const k of comp) if (cell[k]) keep.push(k);
+      }
+      for (const k of keep) {
+        const ky = Math.floor(k / P),
+          kx = k % P;
+        // alarga 1 ponto para cobrir a borda da peça
+        for (let ny = ky - 1; ny <= ky + 1; ny++)
+          for (let nx = kx - 1; nx <= kx + 1; nx++) {
+            if (nx < 0 || ny < 0 || nx >= P || ny >= P) continue;
+            for (let yy = Math.floor(ny * sxy[1]); yy < Math.min(H, Math.ceil((ny + 1) * sxy[1])); yy++)
+              for (let xx = Math.floor(nx * sxy[0]); xx < Math.min(W, Math.ceil((nx + 1) * sxy[0])); xx++) st.mask[yy * W + xx] = 0;
+          }
+      }
+    }
     const midLt = (mn[lt] + mx[lt]) / 2;
     // pneus tocam o chão: os pontos mais baixos de cada lado formam uma mancha de contato por roda
     const floor = mn[1] + hh * 0.07;
