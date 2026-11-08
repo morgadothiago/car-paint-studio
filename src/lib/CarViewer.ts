@@ -103,6 +103,7 @@ interface TexState {
   posMap?: { P: number; pos: Float32Array; has: Uint8Array }; // posição 3D de cada ponto da textura (para o pincel)
   rim?: Uint8Array; // 255 = aro da roda (recebe a cor das rodas); detectado automaticamente
   partsDone?: boolean;
+  cover?: { key: string; w: Float32Array }; // cobertura da lataria (com fechamento de riscos)
   blur?: { rgb: Float32Array[]; lum: Float32Array; big: Float32Array }; // cor suavizada (classificar a lataria) e luminância suave (sombreado sem granulado)
 }
 
@@ -498,13 +499,50 @@ export class CarViewer {
     const ratio = (i: number) => {
       const p = i >> 2;
       const mid = CLIP * Math.tanh((lb[p] - lg[p]) / CLIP);
-      return 1 + ((lg[p] - bl) * 0.05 + mid * 0.1) / bl;
+      return 1 + (mid * 0.1) / bl;
     };
+    // Cobertura da lataria por pixel. Depois de classificar, um "fechamento" (dilata e erode) preenche riscos,
+    // contornos claros de frisos e frestas finas, que ficariam com a cor antiga.
+    const key = `${br | 0},${bg | 0},${bb | 0},${tol},${keepDark}`;
+    if (!st.cover || st.cover.key !== key) {
+      const w = st.orig.width,
+        h = st.orig.height;
+      let cov = new Float32Array(w * h);
+      for (let p = 0; p < cov.length; p++) {
+        if (keepDark && lum(cb[0][p], cb[1][p], cb[2][p]) < 26) continue;
+        // Distância em cor (croma) + diferença de brilho com peso menor: contornos claros e sombras da mesma tinta contam como lataria.
+        const dl = lum(cb[0][p], cb[1][p], cb[2][p]) - bl;
+        const dc = Math.sqrt((cb[0][p] - dl - br) ** 2 + (cb[1][p] - dl - bg) ** 2 + (cb[2][p] - dl - bb) ** 2);
+        const dlw = dl > 0 ? dl * 0.3 + Math.max(0, dl - 40) * 0.7 : dl * 0.8; // muito mais claro que a lataria = vidro/cromado
+        const d = Math.sqrt(dc * dc + dlw * dlw);
+        cov[p] = d >= soft ? 0 : d <= tol ? 1 : 1 - (d - tol) / (soft - tol);
+      }
+      const R = Math.max(2, Math.round(w / 400));
+      const pass = (src: Float32Array, horiz: boolean, isMax: boolean) => {
+        const out = new Float32Array(src.length);
+        const len = horiz ? w : h,
+          lines = horiz ? h : w;
+        for (let l = 0; l < lines; l++)
+          for (let a = 0; a < len; a++) {
+            let v = isMax ? 0 : 1;
+            const lo = Math.max(0, a - R),
+              hi = Math.min(len - 1, a + R);
+            for (let b = lo; b <= hi; b++) {
+              const x = src[horiz ? l * w + b : b * w + l];
+              v = isMax ? (x > v ? x : v) : x < v ? x : v;
+            }
+            out[horiz ? l * w + a : a * w + l] = v;
+          }
+        return out;
+      };
+      cov = pass(pass(cov, true, true), false, true); // dilata
+      cov = pass(pass(cov, true, false), false, false); // erode
+      st.cover = { key, w: cov };
+    }
+    const cvw = st.cover.w;
     const near = (i: number) => {
-      const p = i >> 2;
-      if (keepDark && lum(cb[0][p], cb[1][p], cb[2][p]) < 26) return -1;
-      const d = Math.sqrt((cb[0][p] - br) ** 2 + (cb[1][p] - bg) ** 2 + (cb[2][p] - bb) ** 2);
-      return d >= soft ? -1 : d <= tol ? 1 : 1 - (d - tol) / (soft - tol);
+      const v = cvw[i >> 2];
+      return v > 0.02 ? v : -1;
     };
 
     if (!st.q || st.q.tol !== tol) {
