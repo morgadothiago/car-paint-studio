@@ -103,7 +103,7 @@ interface TexState {
   posMap?: { P: number; pos: Float32Array; has: Uint8Array }; // posição 3D de cada ponto da textura (para o pincel)
   rim?: Uint8Array; // 255 = aro da roda (recebe a cor das rodas); detectado automaticamente
   partsDone?: boolean;
-  blur?: { rgb: Float32Array[]; lum: Float32Array }; // cor suavizada (classificar a lataria) e luminância suave (sombreado sem granulado)
+  blur?: { rgb: Float32Array[]; lum: Float32Array; big: Float32Array }; // cor suavizada (classificar a lataria) e luminância suave (sombreado sem granulado)
 }
 
 const rgb = (h: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
@@ -182,6 +182,8 @@ export class CarViewer {
       roughness?: number;
       metalnessMap?: THREE.Texture | null;
       roughnessMap?: THREE.Texture | null;
+      normalScale?: THREE.Vector2;
+      normalMap?: THREE.Texture | null;
     }
   >();
   private raf = 0;
@@ -218,12 +220,37 @@ export class CarViewer {
     this.scene.background = new THREE.Color(0x14171c);
     this.scene.environmentIntensity = 0.7; // reflexo menos estourado no capô e teto
 
+    const key = new THREE.DirectionalLight(0xffffff, 1.6); // luz principal: dá definição e faixas de brilho no verniz
+    key.position.set(4, 7, 5);
+    const rim = new THREE.DirectionalLight(0xbfd4ff, 0.7); // contraluz fria nas bordas
+    rim.position.set(-5, 3, -4);
+    this.scene.add(key, rim);
+
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(6, 64),
       new THREE.MeshStandardMaterial({ color: 0x1b1f26, roughness: 0.9 }),
     );
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
+    {
+      // sombra de contato suave sob o carro
+      const c = document.createElement("canvas");
+      c.width = c.height = 128;
+      const g = c.getContext("2d")!;
+      const grad = g.createRadialGradient(64, 64, 6, 64, 64, 62);
+      grad.addColorStop(0, "rgba(0,0,0,0.75)");
+      grad.addColorStop(0.55, "rgba(0,0,0,0.35)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 128, 128);
+      const sh = new THREE.Mesh(
+        new THREE.PlaneGeometry(6.4, 3.2),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }),
+      );
+      sh.rotation.x = -Math.PI / 2;
+      sh.position.y = 0.01;
+      this.scene.add(sh);
+    }
 
     this.camera.position.set(5, 2.2, 6);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -289,6 +316,8 @@ export class CarViewer {
           roughness: mat.roughness,
           metalnessMap: mat.metalnessMap,
           roughnessMap: mat.roughnessMap,
+          normalScale: mat.normalScale.clone(),
+          normalMap: mat.normalMap,
         });
       }
     });
@@ -459,11 +488,18 @@ export class CarViewer {
       st.blur = {
         rgb: ch.map((a) => boxBlur(a, w, h, Math.max(2, Math.round(w / 700)))),
         lum: boxBlur(L, w, h, Math.max(3, Math.round(w / 320))),
+        big: boxBlur(L, w, h, Math.max(10, Math.round(w / 70))),
       };
     }
-    const { rgb: cb, lum: lb } = st.blur;
-    const GAIN = 0.4; // o sombreado "assado" no scan vira só parte da variação: o resto vem da luz 3D (tinta limpa)
-    const ratio = (i: number) => 1 + (lb[i >> 2] / bl - 1) * GAIN;
+    const { rgb: cb, lum: lb, big: lg } = st.blur;
+    // Sombreado do scan: o detalhe fino do scan são rachaduras de textura e sujeira, então é descartado.
+    // Só uma fração mínima da variação larga fica; o volume do carro vem da luz 3D (tinta lisa).
+    const CLIP = 0.05 * bl;
+    const ratio = (i: number) => {
+      const p = i >> 2;
+      const mid = CLIP * Math.tanh((lb[p] - lg[p]) / CLIP);
+      return 1 + ((lg[p] - bl) * 0.05 + mid * 0.1) / bl;
+    };
     const near = (i: number) => {
       const p = i >> 2;
       if (keepDark && lum(cb[0][p], cb[1][p], cb[2][p]) < 26) return -1;
@@ -559,6 +595,7 @@ export class CarViewer {
     const p = m as THREE.MeshPhysicalMaterial;
     p.metalnessMap = null;
     p.roughnessMap = null;
+    p.normalMap = null; // o mapa de normais do scan é ruidoso e mancha o brilho do verniz
     Object.assign(p, FINISHES[finish]);
     if (finish === "metallic") {
       p.clearcoatNormalMap = flakeNormal();
@@ -888,6 +925,8 @@ export class CarViewer {
       if (o.roughness !== undefined) p.roughness = o.roughness;
       p.metalnessMap = o.metalnessMap ?? null;
       p.roughnessMap = o.roughnessMap ?? null;
+      if (o.normalScale) p.normalScale.copy(o.normalScale);
+      p.normalMap = o.normalMap ?? null;
       m.needsUpdate = true;
     }
   }
