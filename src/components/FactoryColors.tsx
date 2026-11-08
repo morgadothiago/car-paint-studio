@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { deriveTones, type Tones } from "../lib/colors";
 import type { ColorEntry } from "../lib/types";
+import { IconSearch, IconUpload, IconSparkles } from "./Icons";
 
 // Slugs de marcas vendidas no Brasil (formato usado pela Imagin.studio).
 const BR_MAKES = [
@@ -54,6 +55,8 @@ export default function FactoryColors({ onPick }: { onPick: (t: Tones) => void }
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const csvFileRef = useRef<HTMLInputElement>(null);
 
   const refresh = async () => {
     const y = /^\d{4}$/.test(year) ? +year : undefined;
@@ -102,63 +105,164 @@ export default function FactoryColors({ onPick }: { onPick: (t: Tones) => void }
   const allMakes = [...new Set([...BR_MAKES, ...makes])];
 
   return (
-    <section>
-      <h2>Cores de fábrica</h2>
-      {!hasKey && (
-        <>
-          <input type="password" placeholder="Chave (customer) da Imagin.studio" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} />
-          <button
-            disabled={!keyInput.trim()}
-            onClick={async () => {
-              await window.api.setImaginKey(keyInput.trim());
-              setKeyInput("");
-              setHasKey(true);
-            }}
-          >
-            Salvar chave
-          </button>
-        </>
-      )}
-      <select value={make} onChange={(e) => setMake(e.target.value)}>
-        <option value="">Todas as marcas</option>
-        {allMakes.map((m) => (
-          <option key={m} value={m}>
-            {m}
-          </option>
-        ))}
-      </select>
-      <div className="row">
-        <input style={{ flex: 1 }} placeholder="Modelo (ex.: polo)" value={model} onChange={(e) => setModel(e.target.value)} />
-        <input style={{ width: 70 }} placeholder="Ano" maxLength={4} value={year} onChange={(e) => setYear(e.target.value)} />
-      </div>
-      <button className="primary" disabled={!hasKey || !make || busy} onClick={sync} title="Baixa as cores da marca (ou do modelo/ano) e guarda na base local">
-        {busy ? "Buscando…" : "Buscar e salvar na base"}
+    <div className="card collapsible-card">
+      <button className="card-collapsible-header" onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="card-title-group">
+          <div className="title-with-icon">
+            <IconSparkles size={16} />
+            <span className="card-title">Cores Originais de Fábrica (OEM)</span>
+          </div>
+          <span className="card-subtitle">
+            {items.length > 0 ? `${items.length} cores catalogadas` : "Catálogo oficial de montadoras"}
+          </span>
+        </div>
+        <span className="chevron-toggle">{isExpanded ? "▲" : "▼"}</span>
       </button>
-      <label className="muted">
-        Importar CSV (make,model,yearFrom,yearTo,code,name,base,highlight,shadow)
-        <input type="file" accept=".csv,text/csv" onChange={(e) => importCsv(e.target.files?.[0])} />
-      </label>
-      {msg && <p className="muted">{msg}</p>}
-      {err && <p className="err">{err}</p>}
 
-      <input placeholder="Filtrar por nome ou código" value={text} onChange={(e) => setText(e.target.value)} />
-      <p className="muted">{items.length ? `${items.length} cores na base` : "Base vazia. Busque uma marca ou importe um CSV."}</p>
-      <div className="fc-list">
-        {items.map((c, i) => {
-          const t = toTones(c);
-          return (
-            <button key={i} className="fc" onClick={() => onPick(t)} title={`Base ${t.base} · Brilho ${t.highlight} · Sombra ${t.shadow}${c.source === "estimado" ? " · hex estimado" : ""}`}>
-              <span style={{ background: `linear-gradient(135deg, ${t.highlight} 0 33%, ${t.base} 33% 66%, ${t.shadow} 66%)` }} />
-              <b>{c.name}{c.source === "estimado" ? " ≈" : ""}</b>
-              <small>
-                {c.make}
-                {c.model ? ` ${c.model}` : ""}
-                {c.yearFrom ? ` ${c.yearFrom}${c.yearTo && c.yearTo !== c.yearFrom ? `–${c.yearTo}` : ""}` : ""} · {c.code}
-              </small>
+      {isExpanded && (
+        <div className="factory-colors-body">
+          {!hasKey && (
+            <div className="alert-box">
+              <span>Chave Imagin.studio necessária para sincronizar novas marcas.</span>
+              <div className="input-group" style={{ marginTop: 8 }}>
+                <input
+                  type="password"
+                  placeholder="Customer key da Imagin.studio…"
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                />
+                <button
+                  className="btn-secondary"
+                  disabled={!keyInput.trim()}
+                  onClick={async () => {
+                    await window.api.setImaginKey(keyInput.trim());
+                    setKeyInput("");
+                    setHasKey(true);
+                  }}
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Filters Grid */}
+          <div className="form-group">
+            <label className="field-label">Montadora</label>
+            <select className="custom-select" value={make} onChange={(e) => setMake(e.target.value)}>
+              <option value="">Todas as montadoras</option>
+              {allMakes.map((m) => (
+                <option key={m} value={m}>
+                  {m.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group" style={{ flex: 2 }}>
+              <label className="field-label">Modelo (opcional)</label>
+              <input
+                placeholder="Ex.: Polo, Civic, 911"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+              />
+            </div>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label className="field-label">Ano</label>
+              <input
+                placeholder="Ex.: 2024"
+                maxLength={4}
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="btn-group-row">
+            <button
+              className="btn-primary"
+              style={{ flex: 2 }}
+              disabled={!hasKey || !make || busy}
+              onClick={sync}
+              title="Baixa as cores da montadora e armazena na base de dados local"
+            >
+              {busy ? "Sincronizando…" : "Buscar Cores da Marca"}
             </button>
-          );
-        })}
-      </div>
-    </section>
+
+            <button
+              className="btn-secondary"
+              style={{ flex: 1 }}
+              onClick={() => csvFileRef.current?.click()}
+              title="Importar planilha CSV com códigos de cores"
+            >
+              <IconUpload size={14} /> Importar CSV
+            </button>
+            <input
+              type="file"
+              ref={csvFileRef}
+              accept=".csv,text/csv"
+              style={{ display: "none" }}
+              onChange={(e) => importCsv(e.target.files?.[0])}
+            />
+          </div>
+
+          {msg && <div className="form-success-box">{msg}</div>}
+          {err && <div className="form-error-box">{err}</div>}
+
+          {/* Search in catalog */}
+          <div className="search-input-wrapper">
+            <IconSearch size={14} className="search-icon" />
+            <input
+              className="search-input"
+              placeholder="Filtrar por nome ou código de tinta…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </div>
+
+          {/* Color items list */}
+          <div className="factory-colors-list">
+            {items.map((c, i) => {
+              const t = toTones(c);
+              return (
+                <button
+                  key={i}
+                  className="factory-color-item"
+                  onClick={() => onPick(t)}
+                  title={`Base ${t.base} · Brilho ${t.highlight} · Sombra ${t.shadow}${c.source === "estimado" ? " · hex estimado" : ""}`}
+                >
+                  <span
+                    className="fc-swatch"
+                    style={{
+                      background: `linear-gradient(135deg, ${t.highlight} 0 33%, ${t.base} 33% 66%, ${t.shadow} 66%)`,
+                    }}
+                  />
+                  <div className="fc-details">
+                    <span className="fc-name">
+                      {c.name}
+                      {c.source === "estimado" && <span className="estimated-tag">≈</span>}
+                    </span>
+                    <span className="fc-sub">
+                      {c.make?.toUpperCase()}
+                      {c.model ? ` • ${c.model}` : ""}
+                      {c.yearFrom ? ` • ${c.yearFrom}${c.yearTo && c.yearTo !== c.yearFrom ? `–${c.yearTo}` : ""}` : ""}{" "}
+                      • Cód: {c.code}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+            {!items.length && (
+              <div className="empty-state-box">
+                <span className="empty-state-text">
+                  Nenhuma cor encontrada com os filtros atuais. Selecione uma montadora para sincronizar.
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { IconFileText } from "./Icons";
 
 interface Item {
   codigo: string | number;
@@ -56,51 +57,132 @@ export default function Fipe() {
     if (year) run<Result>(`carros/marcas/${brand}/modelos/${model}/anos/${year}`, setResult);
   }, [year]);
 
-  const sel = (v: string, set: (s: string) => void, items: Item[], ph: string) => (
-    <select value={v} onChange={(e) => set(e.target.value)} disabled={!items.length}>
-      <option value="">{ph}</option>
-      {items.map((i) => (
-        <option key={i.codigo} value={i.codigo}>
-          {i.nome}
-        </option>
-      ))}
-    </select>
-  );
-
   return (
-    <section>
-      <h2>Dados do veículo (FIPE)</h2>
-      {sel(brand, setBrand, brands, "Marca")}
-      {sel(model, setModel, models, "Modelo")}
-      {sel(year, setYear, years, "Ano")}
-      {error && <p className="err">{error}</p>}
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title-group">
+          <div className="title-with-icon">
+            <IconFileText size={16} />
+            <span className="card-title">Tabela FIPE Oficial</span>
+          </div>
+          <span className="card-subtitle">Consulta de precificação e dados de mercado</span>
+        </div>
+      </div>
+
+      <div className="form-cascade-grid">
+        <div className="form-group">
+          <label className="field-label">Marca</label>
+          <select
+            className="custom-select"
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
+            disabled={!brands.length}
+          >
+            <option value="">Selecione a montadora…</option>
+            {brands.map((i) => (
+              <option key={i.codigo} value={i.codigo}>
+                {i.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label className="field-label">Modelo</label>
+          <select
+            className="custom-select"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            disabled={!models.length}
+          >
+            <option value="">Selecione o modelo…</option>
+            {models.map((i) => (
+              <option key={i.codigo} value={i.codigo}>
+                {i.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label className="field-label">Ano / Versão</label>
+          <select
+            className="custom-select"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            disabled={!years.length}
+          >
+            <option value="">Selecione o ano…</option>
+            {years.map((i) => (
+              <option key={i.codigo} value={i.codigo}>
+                {i.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {error && <div className="form-error-box">{error}</div>}
+
       {(error || !brands.length) && (
-        <div className="manual">
-          <p className="muted">Entrada manual</p>
-          <input placeholder="Marca" value={manual.marca} onChange={(e) => setManual({ ...manual, marca: e.target.value })} />
-          <input placeholder="Modelo" value={manual.modelo} onChange={(e) => setManual({ ...manual, modelo: e.target.value })} />
-          <input placeholder="Ano" value={manual.ano} onChange={(e) => setManual({ ...manual, ano: e.target.value })} />
-          <input placeholder="Placa (opcional)" value={manual.placa} onChange={(e) => setManual({ ...manual, placa: e.target.value.toUpperCase() })} />
+        <div className="manual-form-box">
+          <span className="field-label">Entrada manual de veículo</span>
+          <div className="form-row">
+            <input
+              placeholder="Marca (ex.: Audi)"
+              value={manual.marca}
+              onChange={(e) => setManual({ ...manual, marca: e.target.value })}
+            />
+            <input
+              placeholder="Modelo (ex.: RS6)"
+              value={manual.modelo}
+              onChange={(e) => setManual({ ...manual, modelo: e.target.value })}
+            />
+          </div>
+          <div className="form-row">
+            <input
+              placeholder="Ano (ex.: 2024)"
+              value={manual.ano}
+              onChange={(e) => setManual({ ...manual, ano: e.target.value })}
+            />
+            <input
+              placeholder="Placa (opcional)"
+              value={manual.placa}
+              onChange={(e) => setManual({ ...manual, placa: e.target.value.toUpperCase() })}
+            />
+          </div>
         </div>
       )}
+
       {result && (
-        <dl className="info">
-          <dt>Veículo</dt>
-          <dd>
-            {result.Marca} {result.Modelo}
-          </dd>
-          <dt>Ano</dt>
-          <dd>{result.AnoModelo}</dd>
-          <dt>Combustível</dt>
-          <dd>{result.Combustivel}</dd>
-          <dt>Código FIPE</dt>
-          <dd>{result.CodigoFipe}</dd>
-          <dt>Valor</dt>
-          <dd>{result.Valor}</dd>
-          <dt>Referência</dt>
-          <dd>{result.MesReferencia}</dd>
-        </dl>
+        <div className="fipe-valuation-card">
+          <div className="fipe-top">
+            <div className="fipe-vehicle-info">
+              <span className="fipe-car-name">
+                {result.Marca} {result.Modelo}
+              </span>
+              <span className="fipe-car-sub">
+                Ano {result.AnoModelo} • {result.Combustivel}
+              </span>
+            </div>
+            <div className="fipe-price-badge">
+              <span className="fipe-price-label">Preço Médio FIPE</span>
+              <span className="fipe-price-value">{result.Valor}</span>
+            </div>
+          </div>
+
+          <div className="fipe-meta-grid">
+            <div className="fipe-meta-item">
+              <span className="meta-k">Código FIPE:</span>
+              <span className="meta-v">{result.CodigoFipe}</span>
+            </div>
+            <div className="fipe-meta-item">
+              <span className="meta-k">Mês de Referência:</span>
+              <span className="meta-v">{result.MesReferencia}</span>
+            </div>
+          </div>
+        </div>
       )}
-    </section>
+    </div>
   );
 }

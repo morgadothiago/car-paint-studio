@@ -142,6 +142,7 @@ export class CarViewer {
     this.camera.position.set(5, 2.2, 6);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
     this.controls.target.set(0, 0.7, 0);
 
@@ -338,7 +339,9 @@ export class CarViewer {
     const bl = Math.max(20, lum(br, bg, bb));
     const src = st.orig.data;
     const soft = tol * 1.5;
+    const keepDark = bl >= 60; // carro não escuro: preto quase puro é pneu, vidro ou friso, nunca lataria
     const near = (i: number) => {
+      if (keepDark && lum(src[i], src[i + 1], src[i + 2]) < 26) return -1;
       const d = Math.sqrt((src[i] - br) ** 2 + (src[i + 1] - bg) ** 2 + (src[i + 2] - bb) ** 2);
       return d >= soft ? -1 : d <= tol ? 1 : 1 - (d - tol) / (soft - tol);
     };
@@ -400,12 +403,31 @@ export class CarViewer {
     });
   }
 
+  /** Vidros, pneus, rodas, faróis e cromados não são lataria: nunca recebem a cor. */
+  private isProtected(m: PBR): boolean {
+    if (/glass|window|windshield|vidro|parabrisa|tire|tyre|pneu|wheel|rim\b|roda|rubber|borracha|light|lamp|farol|lanterna|chrome|cromad|trim|friso|grill|mirror|espelho/i.test(m.name || "")) return true;
+    if (m.transparent || m.opacity < 0.95 || ((m as THREE.MeshPhysicalMaterial).transmission ?? 0) > 0.05) return true;
+    if (!this.originals.get(m.uuid)?.map) {
+      const o = this.originals.get(m.uuid)!.color;
+      const l = lum(o.r * 255, o.g * 255, o.b * 255);
+      if (l < 30) return [...this.originals.values()].some((x) => !x.map && lum(x.color.r * 255, x.color.g * 255, x.color.b * 255) >= 30);
+    }
+    return false;
+  }
+
   private apply() {
     if (!this.last) return;
     const { uuids, tones, finish, tol } = this.last;
     for (const id of uuids) {
       const m = this.materials.get(id);
       if (!m) continue;
+      if (this.isProtected(m)) {
+        const o = this.originals.get(id)!;
+        m.color.copy(o.color);
+        m.map = o.map ?? null;
+        m.needsUpdate = true;
+        continue;
+      }
       const st = this.texState(m);
       if (st) {
         this.recolor(st, tones, tol);
@@ -951,6 +973,48 @@ export class CarViewer {
     this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
     this.controls.target.copy(s.target);
     this.camera.position.copy(s.pos);
+    this.controls.update();
+  }
+
+  setTurntable(on: boolean) {
+    this.controls.autoRotate = on;
+    this.controls.autoRotateSpeed = 2.0;
+  }
+
+  isTurntable(): boolean {
+    return this.controls.autoRotate;
+  }
+
+  resetCamera() {
+    this.setCameraView("perspective");
+  }
+
+  setCameraView(view: "perspective" | "front" | "side" | "rear" | "top") {
+    if (this.saved) this.exitInterior();
+    const target = new THREE.Vector3(0, 0.7, 0);
+    this.controls.target.copy(target);
+    this.controls.minDistance = 0;
+    this.controls.maxDistance = Infinity;
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+    switch (view) {
+      case "perspective":
+        this.camera.position.set(4.8, 2.0, 5.4);
+        break;
+      case "front":
+        this.camera.position.set(0, 1.2, 5.8);
+        break;
+      case "side":
+        this.camera.position.set(5.8, 1.2, 0);
+        break;
+      case "rear":
+        this.camera.position.set(0, 1.2, -5.8);
+        break;
+      case "top":
+        this.controls.maxPolarAngle = Math.PI / 2;
+        this.camera.position.set(0.01, 7.5, 0.01);
+        break;
+    }
     this.controls.update();
   }
 

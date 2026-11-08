@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { IconSearch } from "./Icons";
 
 const COLOR_HEX: Record<string, string> = {
   BRANCA: "#f2f1ec",
@@ -24,7 +25,12 @@ interface Info {
   cor?: string;
 }
 
-export default function Plate({ onColor }: { onColor: (hex: string) => void }) {
+interface PlateProps {
+  onColor: (hex: string) => void;
+  onOpenSettings?: () => void;
+}
+
+export default function Plate({ onColor, onOpenSettings }: PlateProps) {
   const [plate, setPlate] = useState("");
   const [token, setToken] = useState("");
   const [hasToken, setHasToken] = useState(false);
@@ -37,6 +43,7 @@ export default function Plate({ onColor }: { onColor: (hex: string) => void }) {
   }, []);
 
   const search = async () => {
+    if (!plate.trim()) return;
     setError("");
     setInfo(null);
     setBusy(true);
@@ -52,51 +59,109 @@ export default function Plate({ onColor }: { onColor: (hex: string) => void }) {
   };
 
   return (
-    <section>
-      <h2>Consultar por placa</h2>
-      {!hasToken && (
-        <>
-          <input type="password" placeholder="Token da API Placas" value={token} onChange={(e) => setToken(e.target.value)} />
-          <button
-            disabled={!token.trim()}
-            onClick={async () => {
-              await window.api.setPlateToken(token.trim());
-              setToken("");
-              setHasToken(true);
-            }}
-          >
-            Salvar token
-          </button>
-        </>
-      )}
-      <div className="row">
-        <input
-          style={{ flex: 1 }}
-          placeholder="ABC1D23"
-          maxLength={8}
-          value={plate}
-          onChange={(e) => setPlate(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === "Enter" && plate && hasToken && search()}
-        />
-        <button className="primary" disabled={!plate || !hasToken || busy} onClick={search}>
-          {busy ? "…" : "Buscar"}
-        </button>
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title-group">
+          <span className="card-title">Consulta de Placa Mercosul</span>
+          <span className="card-subtitle">Identificação de montadora, modelo e cor original</span>
+        </div>
       </div>
-      {error && <p className="err">{error}</p>}
-      {info && (
-        <dl className="info">
-          <dt>Placa</dt>
-          <dd>{info.placa}</dd>
-          <dt>Marca</dt>
-          <dd>{info.marca ?? "—"}</dd>
-          <dt>Modelo</dt>
-          <dd>{info.modelo ?? "—"}</dd>
-          <dt>Ano</dt>
-          <dd>{info.ano ?? "—"}</dd>
-          <dt>Cor</dt>
-          <dd>{info.cor ?? "—"}</dd>
-        </dl>
+
+      {!hasToken && (
+        <div className="alert-box">
+          <div className="alert-text">
+            <span>Token da API de Placas não configurado.</span>
+            {onOpenSettings && (
+              <button className="link-button" onClick={onOpenSettings}>
+                Configurar em Ajustes
+              </button>
+            )}
+          </div>
+          <div className="input-group" style={{ marginTop: 8 }}>
+            <input
+              type="password"
+              placeholder="Inserir token diretamente…"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+            <button
+              className="btn-secondary"
+              disabled={!token.trim()}
+              onClick={async () => {
+                await window.api.setPlateToken(token.trim());
+                setToken("");
+                setHasToken(true);
+              }}
+            >
+              Salvar
+            </button>
+          </div>
+        </div>
       )}
-    </section>
+
+      {/* Styled Mercosul Plate Input Box */}
+      <div className="mercosul-plate-box">
+        <div className="mercosul-header">
+          <span className="mercosul-flag">🇧🇷</span>
+          <span className="mercosul-title">BRASIL</span>
+          <span className="mercosul-br">BR</span>
+        </div>
+        <div className="mercosul-body">
+          <input
+            className="mercosul-input"
+            placeholder="ABC1D23"
+            maxLength={8}
+            value={plate}
+            onChange={(e) => setPlate(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === "Enter" && plate && hasToken && search()}
+          />
+          <button
+            className="btn-primary"
+            disabled={!plate || !hasToken || busy}
+            onClick={search}
+          >
+            <IconSearch size={16} />
+            <span>{busy ? "Buscando…" : "Consultar"}</span>
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="form-error-box">{error}</div>}
+
+      {info && (
+        <div className="vehicle-result-card">
+          <div className="vehicle-result-header">
+            <span className="vehicle-plate-badge">{info.placa}</span>
+            {info.cor && (
+              <div className="vehicle-color-pill">
+                <span
+                  className="color-dot"
+                  style={{ backgroundColor: COLOR_HEX[info.cor.toUpperCase().trim()] || "#888" }}
+                />
+                <span>{info.cor}</span>
+              </div>
+            )}
+          </div>
+          <div className="vehicle-specs-grid">
+            <div className="spec-item">
+              <span className="spec-label">Marca</span>
+              <span className="spec-val">{info.marca ?? "—"}</span>
+            </div>
+            <div className="spec-item">
+              <span className="spec-label">Modelo</span>
+              <span className="spec-val">{info.modelo ?? "—"}</span>
+            </div>
+            <div className="spec-item">
+              <span className="spec-label">Ano Modelo</span>
+              <span className="spec-val">{info.ano ?? "—"}</span>
+            </div>
+            <div className="spec-item">
+              <span className="spec-label">Cor Oficial</span>
+              <span className="spec-val">{info.cor ?? "—"}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
