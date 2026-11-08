@@ -1,5 +1,4 @@
 import React from "react";
-import Plate from "./Plate";
 import Fipe from "./Fipe";
 
 interface VehicleTabProps {
@@ -7,12 +6,11 @@ interface VehicleTabProps {
   onOpenSettings: () => void;
 }
 
-export default function VehicleTab({ onPickColor, onOpenSettings }: VehicleTabProps) {
+/** Dados do veículo pela tabela FIPE (gratuita, sem chave). Consulta por placa foi removida: exige API paga. */
+export default function VehicleTab(_props: VehicleTabProps) {
   return (
     <div className="tab-pane">
-      <Plate onColor={onPickColor} onOpenSettings={onOpenSettings} />
       <Fipe />
     </div>
   );
 }
-
