@@ -44,6 +44,8 @@ interface PaintTabProps {
   onClearBrush: () => void;
   onRestoreOriginal: () => void;
   palette: Swatch[];
+  wheelColor: string | null;
+  setWheelColor: (hex: string | null) => void;
 }
 
 export default function PaintTab({
@@ -69,6 +71,8 @@ export default function PaintTab({
   setBrushR,
   onClearBrush,
   onRestoreOriginal,
+  wheelColor,
+  setWheelColor,
   palette,
 }: PaintTabProps) {
   const [showMats, setShowMats] = useState(false);
@@ -124,6 +128,29 @@ export default function PaintTab({
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Wheels */}
+        <div className="wheel-row" title="Pinta só o aro das rodas. Pneus e vidros ficam protegidos.">
+          <label className="wheel-check">
+            <input
+              type="checkbox"
+              checked={wheelColor !== null}
+              onChange={(e) => setWheelColor(e.target.checked ? "#1f1f22" : null)}
+            />
+            <span>Pintar rodas (aros)</span>
+          </label>
+          {wheelColor !== null && (
+            <div className="color-picker-wrapper">
+              <input
+                type="color"
+                className="native-color-input"
+                value={wheelColor}
+                onChange={(e) => setWheelColor(e.target.value)}
+              />
+              <span className="color-preview-circle" style={{ backgroundColor: wheelColor }} />
+            </div>
+          )}
         </div>
 
         {/* Actions Bar */}

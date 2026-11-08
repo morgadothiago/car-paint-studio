@@ -57,6 +57,11 @@ export default function App() {
   const [brushOn, setBrushOn] = useState(false);
   const [brushMode, setBrushMode] = useState<"protect" | "paint">("protect");
   const [brushR, setBrushR] = useState(22);
+  const [wheelColor, setWheelColorState] = useState<string | null>(null);
+  const setWheelColor = (hex: string | null) => {
+    setWheelColorState(hex);
+    viewer.current?.setWheelColor(hex);
+  };
 
   // Interior & Library
   const [interior, setInteriorState] = useState<InteriorCfg>(defaultInterior);
@@ -197,6 +202,7 @@ export default function App() {
       setSh(t.shadow);
       setFinish(entry.paint.finish);
       setTol(entry.paint.tol);
+      setWheelColor(entry.paint.wheel ?? null);
       viewer.current!.paint(all, t, entry.paint.finish, entry.paint.tol);
     }
     if (mask) {
@@ -266,7 +272,7 @@ export default function App() {
     const t = setTimeout(() => {
       window.api
         .libraryUpdate(currentId, {
-          paint: { hex: color, highlight: hl, shadow: sh, finish, tol },
+          paint: { hex: color, highlight: hl, shadow: sh, finish, tol, wheel: wheelColor },
           interior,
         })
         .catch(() => {});
@@ -375,6 +381,8 @@ export default function App() {
               }}
               onRestoreOriginal={() => viewer.current!.restore()}
               palette={palette}
+              wheelColor={wheelColor}
+              setWheelColor={setWheelColor}
             />
           )}
 

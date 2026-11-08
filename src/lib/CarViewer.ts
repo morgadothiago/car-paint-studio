@@ -30,6 +30,8 @@ interface TexState {
   q?: { tol: number; lo: number; hi: number }; // percentis 5/95 do brilho da lataria no scan
   mask: Uint8Array; // 255 = pode receber tinta, 0 = protegido (rodas, frisos, vidros)
   posMap?: { P: number; pos: Float32Array; has: Uint8Array }; // posição 3D de cada ponto da textura (para o pincel)
+  rim?: Uint8Array; // 255 = aro da roda (recebe a cor das rodas); detectado automaticamente
+  partsDone?: boolean;
 }
 
 const rgb = (h: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
@@ -105,6 +107,7 @@ export class CarViewer {
   private tex = new Map<string, TexState>();
   private last: { uuids: string[]; tones: Tones; finish: Finish; tol: number } | null = null;
   private pending = 0;
+  private wheelColor: string | null = null; // cor das rodas (null = mantém a original)
   private raycaster = new THREE.Raycaster();
   private interior: THREE.Group | null = null;
   private intParts: Partial<Record<InteriorKey, THREE.Group>> = {};
@@ -370,7 +373,21 @@ export class CarViewer {
     const out = new ImageData(new Uint8ClampedArray(src), st.orig.width, st.orig.height);
     const o = out.data;
     const mask = st.mask;
+    const rim = st.rim && this.wheelColor ? st.rim : null;
+    let rl = 100;
+    if (rim) {
+      const ls: number[] = [];
+      for (let i = 0; i < src.length; i += 16) if (rim[i >> 2]) ls.push(lum(src[i], src[i + 1], src[i + 2]));
+      ls.sort((a, b) => a - b);
+      rl = Math.max(40, ls[Math.floor(ls.length * 0.9)] ?? 100); // percentil 90 = cor cheia da roda
+    }
+    const RC = this.wheelColor ? rgb(this.wheelColor) : [0, 0, 0];
     for (let i = 0; i < src.length; i += 4) {
+      if (rim && rim[i >> 2]) {
+        const f = Math.min(1.08, Math.max(0.3, lum(src[i], src[i + 1], src[i + 2]) / rl));
+        for (let j = 0; j < 3; j++) o[i + j] = Math.max(0, Math.min(255, RC[j] * f));
+        continue;
+      }
       const mk = mask[i >> 2];
       if (mk === 0) continue; // região protegida: mantém a textura original
       const w0 = near(i);
@@ -430,6 +447,7 @@ export class CarViewer {
       }
       const st = this.texState(m);
       if (st) {
+        if (!st.partsDone) this.detectParts(st, m);
         this.recolor(st, tones, tol);
         m.map = st.tex;
         m.color.set(0xffffff);
@@ -437,6 +455,100 @@ export class CarViewer {
       Object.assign(m, FINISHES[finish]);
       m.needsUpdate = true;
     }
+  }
+
+  /**
+   * Acha as rodas no scan: agrupa os pontos escuros (pneus) rente ao chão de cada lado, estima centro e raio
+   * de cada roda e separa o aro (centro, recebe a cor das rodas) do pneu (anel externo, sempre protegido).
+   */
+  private detectParts(st: TexState, m: PBR) {
+    st.partsDone = true;
+    const flip = this.originals.get(m.uuid)?.map?.flipY ?? true;
+    if (!st.posMap) this.buildPosMap(st, m, flip);
+    const { P, pos, has } = st.posMap!;
+    const W = st.orig.width,
+      H = st.orig.height;
+    const d = st.orig.data;
+    const ks: number[] = [];
+    let mn = [Infinity, Infinity, Infinity],
+      mx = [-Infinity, -Infinity, -Infinity];
+    for (let k = 0; k < P * P; k++) {
+      if (!has[k]) continue;
+      ks.push(k);
+      for (let a = 0; a < 3; a++) {
+        mn[a] = Math.min(mn[a], pos[k * 3 + a]);
+        mx[a] = Math.max(mx[a], pos[k * 3 + a]);
+      }
+    }
+    if (ks.length < 100) return;
+    const ext = [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]];
+    const lg = ext[0] >= ext[2] ? 0 : 2; // eixo do comprimento
+    const lt = lg === 0 ? 2 : 0; // eixo lateral
+    const hh = ext[1];
+    const midLt = (mn[lt] + mx[lt]) / 2;
+    // pneus tocam o chão: os pontos mais baixos de cada lado formam uma mancha de contato por roda
+    const floor = mn[1] + hh * 0.07;
+    const R = hh * 0.2; // raio típico do conjunto roda+pneu em relação à altura do carro
+    const wheels: { side: number; cl: number; cy: number; r: number }[] = [];
+    for (const side of [1, -1]) {
+      const cand = ks.filter((k) => pos[k * 3 + 1] < floor && (pos[k * 3 + lt] - midLt) * side > ext[lt] * 0.15);
+      if (cand.length < 40) continue;
+      cand.sort((a, b) => pos[a * 3 + lg] - pos[b * 3 + lg]);
+      const groups: number[][] = [[cand[0]]];
+      for (let i = 1; i < cand.length; i++) {
+        const gap = pos[cand[i] * 3 + lg] - pos[cand[i - 1] * 3 + lg];
+        if (gap > ext[lg] * 0.08) groups.push([]);
+        groups[groups.length - 1].push(cand[i]);
+      }
+      groups
+        .sort((a, b) => b.length - a.length)
+        .slice(0, 2)
+        .filter((g) => g.length > cand.length * 0.15)
+        .forEach((g) => {
+          const L = g.map((k) => pos[k * 3 + lg]).sort((a, b) => a - b);
+          wheels.push({ side, cl: L[Math.floor(L.length / 2)], cy: mn[1] + R, r: R });
+        });
+    }
+    if (!wheels.length) return;
+    const rim = new Uint8Array(W * H);
+    const sx = W / P,
+      sy = H / P;
+    const tireK = new Set<number>();
+    for (const k of ks) {
+      const l = pos[k * 3 + lg],
+        y = pos[k * 3 + 1],
+        s2 = pos[k * 3 + lt] - midLt;
+      for (const w of wheels) {
+        if (s2 * w.side < ext[lt] * 0.12) continue;
+        const dd = Math.hypot(l - w.cl, y - w.cy);
+        if (dd < w.r * 0.74) {
+          for (let yy = Math.floor(Math.floor(k / P) * sy); yy < Math.min(H, Math.ceil((Math.floor(k / P) + 1) * sy)); yy++)
+            for (let xx = Math.floor((k % P) * sx); xx < Math.min(W, Math.ceil(((k % P) + 1) * sx)); xx++) rim[yy * W + xx] = 255;
+          break;
+        } else if (dd < w.r * 1.08) {
+          tireK.add(k);
+          break;
+        }
+      }
+    }
+    st.rim = rim;
+    for (const k of tireK)
+      for (let yy = Math.floor(Math.floor(k / P) * sy); yy < Math.min(H, Math.ceil((Math.floor(k / P) + 1) * sy)); yy++)
+        for (let xx = Math.floor((k % P) * sx); xx < Math.min(W, Math.ceil(((k % P) + 1) * sx)); xx++) {
+          const j = yy * W + xx;
+          if (!rim[j]) st.mask[j] = 0; // pneu: protegido
+        }
+  }
+
+  /** Cor das rodas (null = não pintar as rodas). */
+  setWheelColor(hex: string | null) {
+    this.wheelColor = hex;
+    if (this.last) this.paint(this.last.uuids, this.last.tones, this.last.finish, this.last.tol);
+  }
+
+  hasWheels(): boolean {
+    for (const st of this.tex.values()) if (st.rim) return true;
+    return false;
   }
 
   /** Clique no carro: define como "cor da lataria" o pixel clicado. Retorna true se acertou. */
@@ -588,6 +700,7 @@ export class CarViewer {
     const st = this.maskState();
     if (!st) return;
     st.mask.fill(255);
+    st.partsDone = false; // "Limpar" volta ao estado automático: pneus protegidos de novo
     if (this.last) this.paint(this.last.uuids, this.last.tones, this.last.finish, this.last.tol);
   }
 

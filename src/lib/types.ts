@@ -34,7 +34,7 @@ export interface LibEntry {
   hash: string;
   createdAt: number;
   thumb?: string;
-  paint?: { hex: string; highlight?: string; shadow?: string; finish: Finish; tol: number };
+  paint?: { hex: string; highlight?: string; shadow?: string; finish: Finish; tol: number; wheel?: string | null };
   interior?: InteriorCfg;
 }
 
