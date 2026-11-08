@@ -20,11 +20,11 @@ const FINISH_BASE: Partial<THREE.MeshPhysicalMaterialParameters> = {
 };
 const FINISHES: Record<Finish, Partial<THREE.MeshPhysicalMaterialParameters>> = {
   // tinta lisa com verniz espelhado
-  gloss: { ...FINISH_BASE, metalness: 0.05, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 0.95 },
+  gloss: { ...FINISH_BASE, metalness: 0.05, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 0.72 },
   // sem verniz, reflexo difuso e suave
   matte: { ...FINISH_BASE, metalness: 0, roughness: 0.92, specularIntensity: 0.35, envMapIntensity: 0.55 },
   // partículas de alumínio sob o verniz (grão via normal do verniz)
-  metallic: { ...FINISH_BASE, metalness: 0.88, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.05 },
+  metallic: { ...FINISH_BASE, metalness: 0.88, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 0.85 },
   // reflexo que muda de tom com o ângulo (película fina) + brilho de borda
   pearl: {
     ...FINISH_BASE,
@@ -32,15 +32,40 @@ const FINISHES: Record<Finish, Partial<THREE.MeshPhysicalMaterialParameters>> = 
     roughness: 0.24,
     clearcoat: 1,
     clearcoatRoughness: 0.02,
-    iridescence: 0.75,
+    iridescence: 0.5,
     iridescenceIOR: 1.6,
     iridescenceThicknessRange: [180, 520],
-    sheen: 0.22,
+    sheen: 0.15,
     sheenRoughness: 0.5,
     sheenColor: new THREE.Color(0xffffff),
-    envMapIntensity: 1,
+    envMapIntensity: 0.75,
   },
 };
+
+/** Desfoque de caixa separável (soma deslizante) em um canal por vez. */
+function boxBlur(src: Float32Array, w: number, h: number, r: number): Float32Array {
+  const tmp = new Float32Array(src.length);
+  const out = new Float32Array(src.length);
+  const n = 2 * r + 1;
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    let acc = 0;
+    for (let x = -r; x <= r; x++) acc += src[row + Math.min(w - 1, Math.max(0, x))];
+    for (let x = 0; x < w; x++) {
+      tmp[row + x] = acc / n;
+      acc += src[row + Math.min(w - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let acc = 0;
+    for (let y = -r; y <= r; y++) acc += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = acc / n;
+      acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+    }
+  }
+  return out;
+}
 
 let flakeTex: THREE.Texture | null = null;
 /** Normal map de grão fino (flocos de alumínio) usado no verniz do acabamento metálico. */
@@ -78,6 +103,7 @@ interface TexState {
   posMap?: { P: number; pos: Float32Array; has: Uint8Array }; // posição 3D de cada ponto da textura (para o pincel)
   rim?: Uint8Array; // 255 = aro da roda (recebe a cor das rodas); detectado automaticamente
   partsDone?: boolean;
+  blur?: { rgb: Float32Array[]; lum: Float32Array }; // cor suavizada (classificar a lataria) e luminância suave (sombreado sem granulado)
 }
 
 const rgb = (h: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
@@ -190,6 +216,7 @@ export class CarViewer {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.background = new THREE.Color(0x14171c);
+    this.scene.environmentIntensity = 0.7; // reflexo menos estourado no capô e teto
 
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(6, 64),
@@ -418,9 +445,29 @@ export class CarViewer {
     const src = st.orig.data;
     const soft = tol * 1.5;
     const keepDark = bl >= 60; // carro não escuro: preto quase puro é pneu, vidro ou friso, nunca lataria
+    // O scan tem sujeira e granulado: classificar e sombrear sobre a imagem suavizada deixa a tinta lisa e sem manchas.
+    if (!st.blur) {
+      const w = st.orig.width,
+        h = st.orig.height;
+      const ch = [0, 1, 2].map((c) => {
+        const a = new Float32Array(w * h);
+        for (let p = 0; p < a.length; p++) a[p] = src[p * 4 + c];
+        return a;
+      });
+      const L = new Float32Array(w * h);
+      for (let p = 0; p < L.length; p++) L[p] = lum(ch[0][p], ch[1][p], ch[2][p]);
+      st.blur = {
+        rgb: ch.map((a) => boxBlur(a, w, h, Math.max(2, Math.round(w / 700)))),
+        lum: boxBlur(L, w, h, Math.max(3, Math.round(w / 320))),
+      };
+    }
+    const { rgb: cb, lum: lb } = st.blur;
+    const GAIN = 0.4; // o sombreado "assado" no scan vira só parte da variação: o resto vem da luz 3D (tinta limpa)
+    const ratio = (i: number) => 1 + (lb[i >> 2] / bl - 1) * GAIN;
     const near = (i: number) => {
-      if (keepDark && lum(src[i], src[i + 1], src[i + 2]) < 26) return -1;
-      const d = Math.sqrt((src[i] - br) ** 2 + (src[i + 1] - bg) ** 2 + (src[i + 2] - bb) ** 2);
+      const p = i >> 2;
+      if (keepDark && lum(cb[0][p], cb[1][p], cb[2][p]) < 26) return -1;
+      const d = Math.sqrt((cb[0][p] - br) ** 2 + (cb[1][p] - bg) ** 2 + (cb[2][p] - bb) ** 2);
       return d >= soft ? -1 : d <= tol ? 1 : 1 - (d - tol) / (soft - tol);
     };
 
@@ -429,7 +476,7 @@ export class CarViewer {
       let n = 0;
       for (let i = 0; i < src.length; i += 4 * 3) {
         if (near(i) < 1) continue;
-        const r = lum(src[i], src[i + 1], src[i + 2]) / bl;
+        const r = ratio(i);
         bins[Math.min(399, Math.floor(r * 200))]++;
         n++;
       }
@@ -468,14 +515,14 @@ export class CarViewer {
       const w0 = near(i);
       if (w0 < 0) continue;
       const w = mk === 255 ? w0 : (w0 * mk) / 255;
-      const r = lum(src[i], src[i + 1], src[i + 2]) / bl;
+      const r = ratio(i);
       let c: number[];
       if (r >= 1) {
-        const k = Math.min(1, (r - 1) / (hi - 1));
+        const k = Math.pow(Math.min(1, (r - 1) / (hi - 1)), 1.3) * 0.8;
         const over = r > hi ? r / hi : 1; // detalhe além do brilho máximo
         c = [0, 1, 2].map((j) => (B[j] + (H[j] - B[j]) * k) * over);
       } else {
-        const k = Math.min(1, (1 - r) / (1 - lo));
+        const k = Math.pow(Math.min(1, (1 - r) / (1 - lo)), 1.3) * 0.8;
         const under = r < lo ? r / lo : 1; // detalhe além da sombra
         c = [0, 1, 2].map((j) => (B[j] + (S[j] - B[j]) * k) * under);
       }
