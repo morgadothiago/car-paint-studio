@@ -20,7 +20,7 @@ const FINISH_BASE: Partial<THREE.MeshPhysicalMaterialParameters> = {
 };
 const FINISHES: Record<Finish, Partial<THREE.MeshPhysicalMaterialParameters>> = {
   // tinta lisa com verniz espelhado
-  gloss: { ...FINISH_BASE, metalness: 0.05, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 0.72 },
+  gloss: { ...FINISH_BASE, metalness: 0.05, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 0.6 },
   // sem verniz, reflexo difuso e suave
   matte: { ...FINISH_BASE, metalness: 0, roughness: 0.92, specularIntensity: 0.35, envMapIntensity: 0.55 },
   // partículas de alumínio sob o verniz (grão via normal do verniz)
@@ -537,6 +537,28 @@ export class CarViewer {
       };
       cov = pass(pass(cov, true, true), false, true); // dilata
       cov = pass(pass(cov, true, false), false, false); // erode
+      // contornos claros ao lado de frisos e frestas: estende a cobertura alguns pontos, só sobre pixels não escuros
+      const grow = pass(pass(cov, true, true), false, true);
+      for (let p = 0; p < cov.length; p++)
+        if (cov[p] < 0.5 && grow[p] > 0.5 && lum(cb[0][p], cb[1][p], cb[2][p]) > bl * 0.6) cov[p] = 0.9;
+      // Partes claras e sem cor (vidro, placa, lentes): se são grossas, ficam sem tinta; se são finas (contornos, riscos), recebem tinta.
+      const bodyCh = Math.max(br, bg, bb) - Math.min(br, bg, bb);
+      if (bodyCh >= 20) {
+        const Wm = new Float32Array(cov.length);
+        for (let p = 0; p < Wm.length; p++) {
+          const c0 = cb[0][p],
+            c1 = cb[1][p],
+            c2 = cb[2][p];
+          const ch = Math.max(c0, c1, c2) - Math.min(c0, c1, c2);
+          if (lum(c0, c1, c2) - bl > 12 && ch < bodyCh * 0.6) Wm[p] = 1;
+        }
+        const thick = pass(pass(pass(pass(Wm, true, false), false, false), true, true), false, true); // abertura: some o que é fino
+        for (let p = 0; p < cov.length; p++) {
+          if (st.rim && st.rim[p]) continue;
+          if (thick[p] > 0.5 && Wm[p] > 0.5) cov[p] = 0;
+          else if (Wm[p] > 0.5 && cov[p] < 0.5) cov[p] = 0.95;
+        }
+      }
       st.cover = { key, w: cov };
     }
     const cvw = st.cover.w;
@@ -704,8 +726,10 @@ export class CarViewer {
         return lum(d[i], d[i + 1], d[i + 2]);
       };
       const [br, bg, bb] = st.body;
+      const bodyLum = lum(br, bg, bb);
+      const bodyCh = Math.max(br, bg, bb) - Math.min(br, bg, bb);
       const endZone = ext[lg] * 0.17;
-      const y0 = mn[1] + hh * 0.2,
+      const y0 = mn[1] + hh * 0.12,
         y1 = mn[1] + hh * 0.7;
       const prot: number[] = [];
       for (const k of ks) {
@@ -727,11 +751,36 @@ export class CarViewer {
             n++;
           }
         const sd = Math.sqrt(Math.max(0, sum2 / n - (sum / n) ** 2));
-        if (dist > 75 || (sd > 22 && dist > 45)) prot.push(k);
+        const lv = lum(d[i], d[i + 1], d[i + 2]);
+        const ch = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+        // peças brancas/claras e sem cor (placa, lente de farol e lanterna) numa lataria colorida
+        const whitish = bodyCh > 20 && lv > bodyLum + 22 && ch < bodyCh * 0.55;
+        if (dist > 75 || (sd > 22 && dist > 45) || whitish) prot.push(k);
       }
       // Mantém só peças de verdade (grupos grandes de pontos vizinhos); manchas pequenas de sujeira na tinta são ignoradas.
       const cell = new Uint8Array(P * P);
       for (const k of prot) cell[k] = 1;
+      // fechamento (dilata 3 e erode 3): tapa furos dentro de lentes, placas e grades
+      const dil = new Uint8Array(P * P);
+      for (const k of prot) {
+        const ky = Math.floor(k / P),
+          kx = k % P;
+        for (let ny = Math.max(0, ky - 3); ny <= Math.min(P - 1, ky + 3); ny++)
+          for (let nx = Math.max(0, kx - 3); nx <= Math.min(P - 1, kx + 3); nx++) dil[ny * P + nx] = 1;
+      }
+      const clos = new Uint8Array(P * P);
+      for (let ky = 3; ky < P - 3; ky++)
+        for (let kx = 3; kx < P - 3; kx++) {
+          if (!dil[ky * P + kx]) continue;
+          let all = 1;
+          for (let ny = ky - 3; ny <= ky + 3 && all; ny++)
+            for (let nx = kx - 3; nx <= kx + 3; nx++)
+              if (!dil[ny * P + nx]) {
+                all = 0;
+                break;
+              }
+          clos[ky * P + kx] = all;
+        }
       const grow = new Uint8Array(P * P);
       for (const k of prot) {
         const ky = Math.floor(k / P),
@@ -761,7 +810,7 @@ export class CarViewer {
             if (grow[nk] && !seen[nk]) ((seen[nk] = 1), stack.push(nk));
           }
         }
-        if (real >= 110) for (const k of comp) if (cell[k]) keep.push(k);
+        if (real >= 110) for (const k of comp) if (cell[k] || clos[k]) keep.push(k);
       }
       for (const k of keep) {
         const ky = Math.floor(k / P),
