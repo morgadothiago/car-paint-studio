@@ -10,6 +10,7 @@ interface ViewportHUDProps {
   onToggleInside: () => void;
   xray: boolean;
   onToggleXray: () => void;
+  onPhotoreal: () => void;
   turntable: boolean;
   onToggleTurntable: () => void;
   onSelectCameraView: (view: CameraView) => void;
@@ -32,6 +33,7 @@ export default function ViewportHUD({
   onToggleInside,
   xray,
   onToggleXray,
+  onPhotoreal,
   turntable,
   onToggleTurntable,
   onSelectCameraView,
@@ -97,6 +99,11 @@ export default function ViewportHUD({
         >
           <IconRotate360 size={16} className={turntable ? "spinning-icon" : ""} />
           <span>Showroom</span>
+        </button>
+
+        <button className="hud-btn" onClick={onPhotoreal} title="Gera uma foto realista do carro pintado com IA (Nano Banana)">
+          <IconEye size={16} />
+          <span>Foto realista</span>
         </button>
       </div>
 

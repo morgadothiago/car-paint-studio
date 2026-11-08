@@ -11,7 +11,7 @@ const DEV_URL = "http://localhost:5173";
 
 const settingsFile = () => path.join(app.getPath("userData"), "settings.json");
 
-function readSettings(): { meshyKey?: string; plateToken?: string; imaginKey?: string } {
+function readSettings(): { meshyKey?: string; plateToken?: string; imaginKey?: string; geminiKey?: string } {
   try {
     return JSON.parse(fs.readFileSync(settingsFile(), "utf8"));
   } catch {
@@ -38,11 +38,45 @@ ipcMain.handle("settings:get", () => ({
   hasMeshyKey: !!readSettings().meshyKey,
   hasPlateToken: !!readSettings().plateToken,
   hasImaginKey: !!readSettings().imaginKey,
+  hasGeminiKey: !!readSettings().geminiKey,
 }));
 
 ipcMain.handle("settings:setImaginKey", (_e, key: string) => {
   fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
   fs.writeFileSync(settingsFile(), JSON.stringify({ ...readSettings(), imaginKey: key }), { mode: 0o600 });
+});
+
+ipcMain.handle("settings:setGeminiKey", (_e, key: string) => {
+  fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
+  fs.writeFileSync(settingsFile(), JSON.stringify({ ...readSettings(), geminiKey: key }), { mode: 0o600 });
+});
+
+// Foto realista: envia a captura do carro pintado ao Gemini (Nano Banana) e devolve a imagem gerada.
+ipcMain.handle("photoreal:generate", async (_e, shot: string, desc: string) => {
+  const key = readSettings().geminiKey;
+  if (!key) throw new Error("Configure a chave do Gemini (Nano Banana) em Configurações.");
+  const b64 = shot.replace(/^data:image\/\w+;base64,/, "");
+  const prompt =
+    `Turn this 3D render of a car into a photorealistic studio photograph. Keep exactly the same car: same shape, same camera angle, same framing. ` +
+    `Paint: ${desc}. Do not change the paint color, and do not alter the wheels, tires, headlights, taillights, grille, badges, windows or license plate. ` +
+    `Soft professional studio lighting, clean dark-gray backdrop, subtle floor reflection, natural glossy reflections. No text, no watermark.`;
+  const model = "gemini-2.5-flash-image";
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/png", data: b64 } }] }],
+    }),
+  });
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error?.message ? `Gemini: ${json.error.message}` : `Gemini respondeu HTTP ${res.status}`);
+  const parts: any[] = json?.candidates?.[0]?.content?.parts ?? [];
+  const img = parts.map((p) => p.inlineData ?? p.inline_data).find((d) => d?.data);
+  if (!img) {
+    const txt = parts.map((p) => p.text).filter(Boolean).join(" ");
+    throw new Error(txt ? `Gemini não devolveu imagem: ${txt.slice(0, 200)}` : "Gemini não devolveu imagem (pode ter sido bloqueada).");
+  }
+  return `data:${img.mimeType ?? img.mime_type ?? "image/png"};base64,${img.data}`;
 });
 
 ipcMain.handle("settings:setPlateToken", (_e, token: string) => {

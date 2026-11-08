@@ -3122,3 +3122,14 @@ input::placeholder {
 
 .wheel-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 4px; }
 .wheel-check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+
+.photoreal-modal { background: #171a21; border: 1px solid #2a2f3a; border-radius: 14px; width: min(1100px, 94vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+.photoreal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #2a2f3a; }
+.photoreal-body { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px 18px; overflow: auto; }
+.photoreal-body figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-height: 260px; }
+.photoreal-body img { width: 100%; border-radius: 10px; background: #0f1115; }
+.photoreal-body figcaption { font-size: 12px; opacity: 0.65; text-align: center; }
+.photoreal-wait { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; border: 1px dashed #2a2f3a; border-radius: 10px; padding: 20px; text-align: center; font-size: 13px; }
+.photoreal-error { color: #ff8a8a; }
+.photoreal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 1px solid #2a2f3a; }
+@media (max-width: 800px) { .photoreal-body { grid-template-columns: 1fr; } }

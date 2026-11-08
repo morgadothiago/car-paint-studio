@@ -12,6 +12,7 @@ import ModelTab from "./components/ModelTab";
 import InteriorTab from "./components/InteriorTab";
 import VehicleTab from "./components/VehicleTab";
 import SettingsModal from "./components/SettingsModal";
+import PhotorealModal from "./components/PhotorealModal";
 
 const FINISH_LABELS: Record<Finish, string> = {
   gloss: "Brilhante",
@@ -41,6 +42,14 @@ export default function App() {
   // API Key settings
   const [hasKey, setHasKey] = useState(false);
   const [hasImagin, setHasImagin] = useState(false);
+  const [hasGemini, setHasGemini] = useState(false);
+  const [pr, setPr] = useState<{ open: boolean; loading: boolean; shot: string | null; result: string | null; error: string }>({
+    open: false,
+    loading: false,
+    shot: null,
+    result: null,
+    error: "",
+  });
   const [hasPlate, setHasPlate] = useState(false);
 
   // Paint & Materials state
@@ -74,10 +83,27 @@ export default function App() {
     viewer.current?.setInterior(cfg);
   };
 
+  const generatePhotoreal = async () => {
+    if (!hasGemini) {
+      setIsSettingsOpen(true);
+      return;
+    }
+    const shot = viewer.current!.screenshot();
+    setPr({ open: true, loading: true, shot, result: null, error: "" });
+    try {
+      const desc = `${FINISH_LABELS[finish]} finish, base color ${color.toUpperCase()}, highlight ${hl.toUpperCase()}, shadow ${sh.toUpperCase()}${wheelColor ? `, wheel rims ${wheelColor.toUpperCase()}` : ""}`;
+      const result = await window.api.photorealGenerate(shot, desc);
+      setPr((p) => ({ ...p, loading: false, result }));
+    } catch (e) {
+      setPr((p) => ({ ...p, loading: false, error: (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") }));
+    }
+  };
+
   const refreshSettings = () => {
     window.api.getSettings().then((s) => {
       setHasKey(s.hasMeshyKey);
       setHasImagin(s.hasImaginKey);
+      setHasGemini(s.hasGeminiKey);
       setHasPlate(s.hasPlateToken);
     });
   };
@@ -484,6 +510,7 @@ export default function App() {
               viewer.current!.setXray(!xray);
               setXray(!xray);
             }}
+            onPhotoreal={generatePhotoreal}
             turntable={turntable}
             onToggleTurntable={onToggleTurntable}
             onSelectCameraView={onSelectCameraView}
@@ -509,12 +536,23 @@ export default function App() {
         </main>
       </div>
 
+      {pr.open && (
+        <PhotorealModal
+          loading={pr.loading}
+          shot={pr.shot}
+          result={pr.result}
+          error={pr.error}
+          onClose={() => setPr((p) => ({ ...p, open: false }))}
+        />
+      )}
+
       {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         hasMeshy={hasKey}
         hasImagin={hasImagin}
+        hasGemini={hasGemini}
         hasPlate={hasPlate}
         onRefreshSettings={refreshSettings}
       />

@@ -6,6 +6,7 @@ interface SettingsModalProps {
   onClose: () => void;
   hasMeshy: boolean;
   hasImagin: boolean;
+  hasGemini: boolean;
   hasPlate: boolean;
   onRefreshSettings: () => void;
 }
@@ -15,11 +16,13 @@ export default function SettingsModal({
   onClose,
   hasMeshy,
   hasImagin,
+  hasGemini,
   hasPlate,
   onRefreshSettings,
 }: SettingsModalProps) {
   const [meshyKey, setMeshyKey] = useState("");
   const [imaginKey, setImaginKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
   const [plateToken, setPlateToken] = useState("");
   const [status, setStatus] = useState<string>("");
 
@@ -39,6 +42,15 @@ export default function SettingsModal({
     await window.api.setImaginKey(imaginKey.trim());
     setImaginKey("");
     setStatus("Chave Imagin.studio atualizada!");
+    onRefreshSettings();
+    setTimeout(() => setStatus(""), 3000);
+  };
+
+  const handleSaveGemini = async () => {
+    if (!geminiKey.trim()) return;
+    await window.api.setGeminiKey(geminiKey.trim());
+    setGeminiKey("");
+    setStatus("Chave Gemini (Nano Banana) atualizada!");
     onRefreshSettings();
     setTimeout(() => setStatus(""), 3000);
   };
@@ -110,6 +122,28 @@ export default function SettingsModal({
                 onChange={(e) => setImaginKey(e.target.value)}
               />
               <button className="btn-secondary" disabled={!imaginKey.trim()} onClick={handleSaveImagin}>
+                Salvar
+              </button>
+            </div>
+          </div>
+
+          {/* Gemini / Nano Banana */}
+          <div className="setting-card">
+            <div className="setting-header">
+              <span className="setting-name">Gemini · Nano Banana (Foto Realista)</span>
+              <span className={`badge ${hasGemini ? "badge-success" : "badge-muted"}`}>
+                {hasGemini ? "Conectado" : "Não configurado"}
+              </span>
+            </div>
+            <p className="setting-desc">Transforma a captura 3D em foto de estúdio. Chave em aistudio.google.com/apikey.</p>
+            <div className="input-group">
+              <input
+                type="password"
+                placeholder={hasGemini ? "Trocar chave do Gemini…" : "Insira a API key do Gemini…"}
+                value={geminiKey}
+                onChange={(e) => setGeminiKey(e.target.value)}
+              />
+              <button className="btn-secondary" disabled={!geminiKey.trim()} onClick={handleSaveGemini}>
                 Salvar
               </button>
             </div>

@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld("api", {
   setMeshyKey: (key: string) => ipcRenderer.invoke("settings:setMeshyKey", key),
   setPlateToken: (t: string) => ipcRenderer.invoke("settings:setPlateToken", t),
   lookupPlate: (p: string) => ipcRenderer.invoke("plate:lookup", p),
+  setGeminiKey: (k: string) => ipcRenderer.invoke("settings:setGeminiKey", k),
+  photorealGenerate: (shot: string, desc: string) => ipcRenderer.invoke("photoreal:generate", shot, desc),
   setImaginKey: (k: string) => ipcRenderer.invoke("settings:setImaginKey", k),
   colorsSync: (q: unknown) => ipcRenderer.invoke("colors:sync", q),
   colorsImport: (rows: unknown) => ipcRenderer.invoke("colors:import", rows),

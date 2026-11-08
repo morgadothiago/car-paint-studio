@@ -1,5 +1,7 @@
 export interface Api {
-  getSettings(): Promise<{ hasMeshyKey: boolean; hasPlateToken: boolean; hasImaginKey: boolean }>;
+  getSettings(): Promise<{ hasMeshyKey: boolean; hasPlateToken: boolean; hasImaginKey: boolean; hasGeminiKey: boolean }>;
+  setGeminiKey(key: string): Promise<void>;
+  photorealGenerate(shot: string, desc: string): Promise<string>;
   setImaginKey(key: string): Promise<void>;
   colorsSync(q: { make: string; modelFamily?: string; modelYear?: number }): Promise<{ added: number; updated: number; total: number }>;
   colorsImport(rows: Record<string, string>[]): Promise<{ added: number; updated: number; rejected: string[] }>;
